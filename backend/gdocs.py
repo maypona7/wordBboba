@@ -1,0 +1,102 @@
+import re
+from dataclasses import dataclass
+
+import httpx
+from bs4 import BeautifulSoup
+
+DOC_ID_PATTERN = re.compile(
+    r"docs\.google\.com/document/d/(?:e/)?([a-zA-Z0-9_-]+)"
+)
+ACCESS_DENIED_MESSAGE = (
+    "문서에 접근할 수 없습니다. "
+    "'링크가 있는 모든 사용자 → 보기'로 공유했는지 확인하세요."
+)
+INVALID_URL_MESSAGE = "올바른 Google Docs URL이 아닙니다."
+EMPTY_DOC_MESSAGE = "문서에서 텍스트를 찾을 수 없습니다."
+
+
+@dataclass
+class GDocsFetchResult:
+    text: str
+    tabs_fetched: int
+
+
+def extract_doc_id(url: str) -> str:
+    match = DOC_ID_PATTERN.search(url.strip())
+    if not match:
+        raise ValueError(INVALID_URL_MESSAGE)
+    return match.group(1)
+
+
+def _normalize_text(text: str) -> str:
+    lines = [line.strip() for line in text.splitlines()]
+    return "\n".join(line for line in lines if line)
+
+
+def _extract_text_from_html(html: str) -> str:
+    soup = BeautifulSoup(html, "html.parser")
+    for tag in soup(["script", "style", "meta", "link"]):
+        tag.decompose()
+
+    chunks: list[str] = []
+    for element in soup.find_all(["p", "li", "h1", "h2", "h3", "h4", "h5", "h6", "td", "th"]):
+        text = element.get_text(separator=" ", strip=True)
+        if text:
+            chunks.append(text)
+
+    if not chunks:
+        body_text = soup.get_text(separator="\n", strip=True)
+        if body_text:
+            chunks.append(body_text)
+
+    return _normalize_text("\n\n".join(chunks))
+
+
+def _split_tab_sections(text: str) -> list[str]:
+    sections = [section.strip() for section in re.split(r"\n{3,}", text) if section.strip()]
+    return sections if sections else ([text.strip()] if text.strip() else [])
+
+
+async def _fetch_export(client: httpx.AsyncClient, doc_id: str, fmt: str) -> str:
+    url = f"https://docs.google.com/document/d/{doc_id}/export?format={fmt}"
+    try:
+        response = await client.get(url)
+    except httpx.HTTPError as exc:
+        raise PermissionError(ACCESS_DENIED_MESSAGE) from exc
+
+    if response.status_code in (403, 404):
+        raise PermissionError(ACCESS_DENIED_MESSAGE)
+    if response.status_code >= 400:
+        raise PermissionError(ACCESS_DENIED_MESSAGE)
+
+    return response.text
+
+
+async def fetch_gdocs_text(url: str) -> GDocsFetchResult:
+    doc_id = extract_doc_id(url)
+
+    async with httpx.AsyncClient(
+        follow_redirects=True,
+        timeout=30.0,
+        trust_env=False,
+        headers={"User-Agent": "wordBboba/1.0"},
+    ) as client:
+        txt_content = await _fetch_export(client, doc_id, "txt")
+        txt_normalized = _normalize_text(txt_content)
+        txt_sections = _split_tab_sections(txt_normalized)
+
+        html_content = await _fetch_export(client, doc_id, "html")
+        html_text = _extract_text_from_html(html_content)
+        html_sections = _split_tab_sections(html_text)
+
+        if len(html_sections) > len(txt_sections):
+            merged_text = "\n\n".join(html_sections)
+            tabs_fetched = len(html_sections)
+        else:
+            merged_text = "\n\n".join(txt_sections)
+            tabs_fetched = len(txt_sections)
+
+    if not merged_text.strip():
+        raise ValueError(EMPTY_DOC_MESSAGE)
+
+    return GDocsFetchResult(text=merged_text, tabs_fetched=max(tabs_fetched, 1))

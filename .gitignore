@@ -1,0 +1,14 @@
+backend/.venv/
+frontend/node_modules/
+frontend/dist/
+netlify/functions/analyze/analyzer.py
+netlify/functions/analyze/gdocs.py
+__pycache__/
+*.pyc
+.DS_Store
+.local/
+node_modules/
+package-lock.json
+
+# Local Netlify folder
+.netlify
