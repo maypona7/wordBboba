@@ -33,15 +33,21 @@ npm run dev
 
 브라우저에서 `http://localhost:5173` 을 엽니다.
 
-## Netlify + Render 배포
+## Netlify + Hugging Face Spaces 배포 (무료)
 
-Netlify는 **Python 함수를 지원하지 않습니다.** 프론트는 Netlify, API는 Render에 배포합니다.
+Netlify는 **Python 함수를 지원하지 않습니다.** 프론트는 Netlify, API는 Hugging Face Spaces에 배포합니다.
 
-### 1. Render (API)
+### 1. Hugging Face Spaces (API)
 
-1. [Render](https://render.com)에서 이 저장소 연결
-2. `render.yaml` Blueprint로 `wordbboba-api` 서비스 생성
-3. 배포 후 API URL 확인 (예: `https://wordbboba-api.onrender.com`)
+1. [huggingface.co](https://huggingface.co) 가입
+2. **New Space** → SDK: **Docker**, Hardware: **CPU basic · Free**, Visibility: **Public**
+3. Space **Settings → Repository** → GitHub `wordBboba` 연결
+4. **Root directory**: `backend`
+5. 빌드 완료 후 API URL 확인: `https://유저명-스페이스명.hf.space`
+
+```bash
+curl https://유저명-스페이스명.hf.space/api/health
+```
 
 ### 2. Netlify (프론트 + API 프록시)
 
@@ -49,14 +55,18 @@ Netlify 대시보드 → **Site configuration → Environment variables**:
 
 | Key | Value |
 |-----|-------|
-| `BACKEND_URL` | Render API URL (예: `https://wordbboba-api.onrender.com`) |
+| `BACKEND_URL` | HF Space URL (예: `https://유저명-wordbboba-api.hf.space`) |
 
 ```bash
 netlify deploy --prod
 ```
 
 - 프론트: Netlify 정적 호스팅
-- `/api/analyze`: TypeScript Netlify Function → Render API로 프록시
+- `/api/analyze`: TypeScript Netlify Function → HF Space API로 프록시
+
+### Render (대안)
+
+[`render.yaml`](render.yaml)로 Render에도 배포 가능합니다. 유료 플랜이 기본으로 보일 수 있습니다.
 
 ## Google Docs 사용 방법
 
