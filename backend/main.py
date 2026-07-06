@@ -2,12 +2,13 @@ import os
 from typing import Literal
 
 import httpx
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from analyzer import analyze_text
 from gdocs import fetch_gdocs_text
+from pdf import extract_text_from_pdf
 
 app = FastAPI(title="wordBboba", version="1.0.0")
 
@@ -42,7 +43,7 @@ class AnalyzeResponse(BaseModel):
     words: list[WordItem]
     total_tokens: int
     unique_words: int
-    source: Literal["text", "gdocs"]
+    source: Literal["text", "gdocs", "pdf"]
     gdocs_tabs_fetched: int | None = None
 
 
@@ -58,7 +59,7 @@ def health():
 
 @app.post("/api/analyze", response_model=AnalyzeResponse)
 async def analyze(request: AnalyzeRequest):
-    source: Literal["text", "gdocs"] = "text"
+    source: Literal["text", "gdocs", "pdf"] = "text"
     gdocs_tabs_fetched: int | None = None
     text = ""
 
@@ -95,4 +96,37 @@ async def analyze(request: AnalyzeRequest):
         unique_words=result.unique_words,
         source=source,
         gdocs_tabs_fetched=gdocs_tabs_fetched,
+    )
+
+
+@app.post("/api/analyze/pdf", response_model=AnalyzeResponse)
+async def analyze_pdf(
+    file: UploadFile = File(...),
+    min_count: int = Form(2),
+    top_n: int = Form(20),
+):
+    if file.content_type not in ("application/pdf", "application/x-pdf"):
+        filename = (file.filename or "").lower()
+        if not filename.endswith(".pdf"):
+            raise HTTPException(status_code=400, detail="PDF 파일만 업로드할 수 있습니다.")
+
+    data = await file.read()
+    try:
+        text = extract_text_from_pdf(data)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    if min_count < 1 or top_n < 1:
+        raise HTTPException(status_code=400, detail="min_count와 top_n은 1 이상이어야 합니다.")
+
+    result = analyze_text(text, min_count=min_count, top_n=top_n)
+
+    return AnalyzeResponse(
+        words=[
+            WordItem(word=w.word, count=w.count, ratio=w.ratio) for w in result.words
+        ],
+        total_tokens=result.total_tokens,
+        unique_words=result.unique_words,
+        source="pdf",
+        gdocs_tabs_fetched=None,
     )

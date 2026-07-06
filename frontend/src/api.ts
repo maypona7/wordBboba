@@ -8,7 +8,7 @@ export interface AnalyzeResponse {
   words: WordItem[]
   total_tokens: number
   unique_words: number
-  source: 'text' | 'gdocs'
+  source: 'text' | 'gdocs' | 'pdf'
   gdocs_tabs_fetched: number | null
 }
 
@@ -19,6 +19,28 @@ export interface AnalyzeRequest {
   top_n: number
 }
 
+function parseError(data: unknown): string {
+  const detail = (data as { detail?: unknown })?.detail
+  if (typeof detail === 'string') return detail
+  if (Array.isArray(detail)) {
+    return detail
+      .map((item: { msg?: string }) => item.msg)
+      .filter(Boolean)
+      .join(', ')
+  }
+  return '분석 중 오류가 발생했습니다.'
+}
+
+async function handleResponse(response: Response): Promise<AnalyzeResponse> {
+  const data = await response.json().catch(() => ({}))
+
+  if (!response.ok) {
+    throw new Error(parseError(data) || '분석 중 오류가 발생했습니다.')
+  }
+
+  return data as AnalyzeResponse
+}
+
 export async function analyzeText(request: AnalyzeRequest): Promise<AnalyzeResponse> {
   const response = await fetch('/api/analyze', {
     method: 'POST',
@@ -26,18 +48,23 @@ export async function analyzeText(request: AnalyzeRequest): Promise<AnalyzeRespo
     body: JSON.stringify(request),
   })
 
-  const data = await response.json().catch(() => ({}))
+  return handleResponse(response)
+}
 
-  if (!response.ok) {
-    const detail = data.detail
-    const message =
-      typeof detail === 'string'
-        ? detail
-        : Array.isArray(detail)
-          ? detail.map((item: { msg?: string }) => item.msg).filter(Boolean).join(', ')
-          : '분석 중 오류가 발생했습니다.'
-    throw new Error(message || '분석 중 오류가 발생했습니다.')
-  }
+export async function analyzePdf(
+  file: File,
+  min_count: number,
+  top_n: number,
+): Promise<AnalyzeResponse> {
+  const formData = new FormData()
+  formData.append('file', file)
+  formData.append('min_count', String(min_count))
+  formData.append('top_n', String(top_n))
 
-  return data as AnalyzeResponse
+  const response = await fetch('/api/analyze/pdf', {
+    method: 'POST',
+    body: formData,
+  })
+
+  return handleResponse(response)
 }

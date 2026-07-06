@@ -5,7 +5,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY analyzer.py gdocs.py main.py ./
+COPY analyzer.py gdocs.py pdf.py main.py ./
 
 ENV ALLOWED_ORIGINS=https://wordbboba.netlify.app,http://localhost:5173
 

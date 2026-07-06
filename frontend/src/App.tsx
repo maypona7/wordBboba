@@ -1,13 +1,14 @@
-import { useState, type FormEvent } from 'react'
-import { analyzeText, type AnalyzeResponse } from './api'
+import { useState, type FormEvent, type ChangeEvent } from 'react'
+import { analyzeText, analyzePdf, type AnalyzeResponse } from './api'
 import './App.css'
 
-type InputMode = 'text' | 'gdocs'
+type InputMode = 'text' | 'gdocs' | 'pdf'
 
 function App() {
   const [inputMode, setInputMode] = useState<InputMode>('text')
   const [text, setText] = useState('')
   const [gdocsUrl, setGdocsUrl] = useState('')
+  const [pdfFile, setPdfFile] = useState<File | null>(null)
   const [minCount, setMinCount] = useState(2)
   const [topN, setTopN] = useState(20)
   const [loading, setLoading] = useState(false)
@@ -23,12 +24,15 @@ function App() {
     setCopied(false)
 
     try {
-      const response = await analyzeText({
-        text: inputMode === 'text' ? text : null,
-        gdocs_url: inputMode === 'gdocs' ? gdocsUrl : null,
-        min_count: minCount,
-        top_n: topN,
-      })
+      const response =
+        inputMode === 'pdf'
+          ? await analyzePdf(pdfFile!, minCount, topN)
+          : await analyzeText({
+              text: inputMode === 'text' ? text : null,
+              gdocs_url: inputMode === 'gdocs' ? gdocsUrl : null,
+              min_count: minCount,
+              top_n: topN,
+            })
       setResult(response)
     } catch (err) {
       setError(err instanceof Error ? err.message : '분석 중 오류가 발생했습니다.')
@@ -36,8 +40,6 @@ function App() {
       setLoading(false)
     }
   }
-
-  const maxCount = result?.words[0]?.count ?? 1
 
   async function handleCopy() {
     if (!result || result.words.length === 0) return
@@ -47,6 +49,14 @@ function App() {
     setCopied(true)
     setTimeout(() => setCopied(false), 1500)
   }
+
+  function handlePdfChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0] ?? null
+    setPdfFile(file)
+  }
+
+  const maxCount = result?.words[0]?.count ?? 1
+  const submitDisabled = loading || (inputMode === 'pdf' && !pdfFile)
 
   return (
     <div className="app">
@@ -70,6 +80,13 @@ function App() {
           >
             Google Docs
           </button>
+          <button
+            type="button"
+            className={inputMode === 'pdf' ? 'tab active' : 'tab'}
+            onClick={() => setInputMode('pdf')}
+          >
+            PDF
+          </button>
         </div>
 
         {inputMode === 'text' ? (
@@ -82,7 +99,7 @@ function App() {
               rows={10}
             />
           </label>
-        ) : (
+        ) : inputMode === 'gdocs' ? (
           <label className="field">
             <span>Google Docs URL</span>
             <input
@@ -91,6 +108,16 @@ function App() {
               onChange={(e) => setGdocsUrl(e.target.value)}
               placeholder="https://docs.google.com/document/d/..."
             />
+          </label>
+        ) : (
+          <label className="field">
+            <span>PDF 파일</span>
+            <input
+              type="file"
+              accept="application/pdf,.pdf"
+              onChange={handlePdfChange}
+            />
+            {pdfFile && <span className="file-name">{pdfFile.name}</span>}
           </label>
         )}
 
@@ -115,7 +142,7 @@ function App() {
           </label>
         </div>
 
-        <button type="submit" className="submit" disabled={loading}>
+        <button type="submit" className="submit" disabled={submitDisabled}>
           {loading ? '분석 중…' : '분석하기'}
         </button>
       </form>
