@@ -2,12 +2,13 @@ import { useState, type FormEvent, type ChangeEvent } from 'react'
 import { analyzeText, analyzePdf, type AnalyzeResponse } from './api'
 import './App.css'
 
-type InputMode = 'text' | 'gdocs' | 'pdf'
+type InputMode = 'text' | 'gdocs' | 'gslides' | 'pdf'
 
 function App() {
   const [inputMode, setInputMode] = useState<InputMode>('text')
   const [text, setText] = useState('')
   const [gdocsUrl, setGdocsUrl] = useState('')
+  const [gslidesUrl, setGslidesUrl] = useState('')
   const [pdfFile, setPdfFile] = useState<File | null>(null)
   const [minCount, setMinCount] = useState(2)
   const [topN, setTopN] = useState(20)
@@ -30,6 +31,7 @@ function App() {
           : await analyzeText({
               text: inputMode === 'text' ? text : null,
               gdocs_url: inputMode === 'gdocs' ? gdocsUrl : null,
+              gslides_url: inputMode === 'gslides' ? gslidesUrl : null,
               min_count: minCount,
               top_n: topN,
             })
@@ -82,6 +84,13 @@ function App() {
           </button>
           <button
             type="button"
+            className={inputMode === 'gslides' ? 'tab active' : 'tab'}
+            onClick={() => setInputMode('gslides')}
+          >
+            Google Slides
+          </button>
+          <button
+            type="button"
             className={inputMode === 'pdf' ? 'tab active' : 'tab'}
             onClick={() => setInputMode('pdf')}
           >
@@ -107,6 +116,16 @@ function App() {
               value={gdocsUrl}
               onChange={(e) => setGdocsUrl(e.target.value)}
               placeholder="https://docs.google.com/document/d/..."
+            />
+          </label>
+        ) : inputMode === 'gslides' ? (
+          <label className="field">
+            <span>Google Slides URL</span>
+            <input
+              type="url"
+              value={gslidesUrl}
+              onChange={(e) => setGslidesUrl(e.target.value)}
+              placeholder="https://docs.google.com/presentation/d/..."
             />
           </label>
         ) : (

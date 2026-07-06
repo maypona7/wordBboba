@@ -8,13 +8,14 @@ export interface AnalyzeResponse {
   words: WordItem[]
   total_tokens: number
   unique_words: number
-  source: 'text' | 'gdocs' | 'pdf'
+  source: 'text' | 'gdocs' | 'gslides' | 'pdf'
   gdocs_tabs_fetched: number | null
 }
 
 export interface AnalyzeRequest {
   text?: string | null
   gdocs_url?: string | null
+  gslides_url?: string | null
   min_count: number
   top_n: number
 }

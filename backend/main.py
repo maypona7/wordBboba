@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 from analyzer import analyze_text
 from gdocs import fetch_gdocs_text
+from gslides import fetch_gslides_text
 from pdf import extract_text_from_pdf
 
 app = FastAPI(title="wordBboba", version="1.0.0")
@@ -29,6 +30,7 @@ app.add_middleware(
 class AnalyzeRequest(BaseModel):
     text: str | None = None
     gdocs_url: str | None = None
+    gslides_url: str | None = None
     min_count: int = Field(default=2, ge=1)
     top_n: int = Field(default=20, ge=1)
 
@@ -43,7 +45,7 @@ class AnalyzeResponse(BaseModel):
     words: list[WordItem]
     total_tokens: int
     unique_words: int
-    source: Literal["text", "gdocs", "pdf"]
+    source: Literal["text", "gdocs", "gslides", "pdf"]
     gdocs_tabs_fetched: int | None = None
 
 
@@ -59,11 +61,26 @@ def health():
 
 @app.post("/api/analyze", response_model=AnalyzeResponse)
 async def analyze(request: AnalyzeRequest):
-    source: Literal["text", "gdocs", "pdf"] = "text"
+    source: Literal["text", "gdocs", "gslides", "pdf"] = "text"
     gdocs_tabs_fetched: int | None = None
     text = ""
 
-    if request.gdocs_url and request.gdocs_url.strip():
+    if request.gslides_url and request.gslides_url.strip():
+        try:
+            fetch_result = await fetch_gslides_text(request.gslides_url.strip())
+            text = fetch_result.text
+            gdocs_tabs_fetched = fetch_result.slides_fetched
+            source = "gslides"
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except PermissionError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        except httpx.HTTPError as exc:
+            raise HTTPException(
+                status_code=502,
+                detail="Google Slides를 가져오는 중 네트워크 오류가 발생했습니다.",
+            ) from exc
+    elif request.gdocs_url and request.gdocs_url.strip():
         try:
             fetch_result = await fetch_gdocs_text(request.gdocs_url.strip())
             text = fetch_result.text
@@ -81,7 +98,7 @@ async def analyze(request: AnalyzeRequest):
     elif request.text and request.text.strip():
         text = request.text.strip()
     else:
-        raise HTTPException(status_code=400, detail="텍스트 또는 Google Docs URL을 입력해 주세요.")
+        raise HTTPException(status_code=400, detail="텍스트 또는 Google URL을 입력해 주세요.")
 
     if not text:
         raise HTTPException(status_code=400, detail="분석할 텍스트가 없습니다.")
