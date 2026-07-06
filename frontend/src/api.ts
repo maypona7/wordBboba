@@ -20,15 +20,18 @@ export interface AnalyzeRequest {
   top_n: number
 }
 
-function parseError(data: unknown): string {
+function parseError(data: unknown, status: number): string {
   const detail = (data as { detail?: unknown })?.detail
   if (typeof detail === 'string') return detail
   if (Array.isArray(detail)) {
-    return detail
+    const message = detail
       .map((item: { msg?: string }) => item.msg)
       .filter(Boolean)
       .join(', ')
+    if (message) return message
   }
+  if (status === 400) return '요청이 올바르지 않습니다. 입력 내용을 확인해 주세요.'
+  if (status === 403) return '파일에 접근할 수 없습니다. 공유 설정을 확인해 주세요.'
   return '분석 중 오류가 발생했습니다.'
 }
 
@@ -36,7 +39,7 @@ async function handleResponse(response: Response): Promise<AnalyzeResponse> {
   const data = await response.json().catch(() => ({}))
 
   if (!response.ok) {
-    throw new Error(parseError(data) || '분석 중 오류가 발생했습니다.')
+    throw new Error(parseError(data, response.status) || '분석 중 오류가 발생했습니다.')
   }
 
   return data as AnalyzeResponse

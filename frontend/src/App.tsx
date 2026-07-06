@@ -58,7 +58,12 @@ function App() {
   }
 
   const maxCount = result?.words[0]?.count ?? 1
-  const submitDisabled = loading || (inputMode === 'pdf' && !pdfFile)
+  const submitDisabled =
+    loading ||
+    (inputMode === 'pdf' && !pdfFile) ||
+    (inputMode === 'gdocs' && !gdocsUrl.trim()) ||
+    (inputMode === 'gslides' && !gslidesUrl.trim()) ||
+    (inputMode === 'text' && !text.trim())
 
   return (
     <div className="app">
